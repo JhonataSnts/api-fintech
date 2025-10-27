@@ -31,7 +31,7 @@ API RESTful desenvolvida com **Laravel 12**, **Docker** e **Laravel Sanctum**, s
 
 ### - Clonar o repositório
 ```bash
-git clone https://github.com/<seu-usuario>/api-fintech.git
+git clone https://github.com/JhonataSnts/api-fintech.git
 cd api-fintech
 
 - Subir os containers:
