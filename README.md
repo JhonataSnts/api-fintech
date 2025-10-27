@@ -29,24 +29,28 @@ API RESTful desenvolvida com **Laravel 12**, **Docker** e **Laravel Sanctum**, s
 
 ## Instalação com Docker
 
-### 1️⃣ Clonar o repositório
+### - Clonar o repositório
 ```bash
 git clone https://github.com/<seu-usuario>/api-fintech.git
 cd api-fintech
 
-2️⃣ Subir os containers:
+- Subir os containers:
 
 docker compose up -d --build
 
-3️⃣ Instalar dependências:
+- Instalar dependências:
 
 docker compose exec app composer install
 
-4️⃣ Gerar chave da aplicação:
+- Copiar o arquivo de ambiente
+
+cp .env.example .env
+
+- Gerar chave da aplicação:
 
 docker compose exec app php artisan key:generate
 
-5️⃣ Rodar as migrações:
+- Rodar as migrações:
 
 docker compose exec app php artisan migrate
 
