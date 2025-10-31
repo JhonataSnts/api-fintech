@@ -12,14 +12,13 @@ class UserController extends Controller
      */
     public function index()
     {
-        $authUser = auth()->user();
+    $authUser = auth()->user();
 
-        // Exemplo: permitir apenas se for admin
-        // if (!$authUser->is_admin) {
-        //     return response()->json(['message' => 'Acesso negado'], 403);
-        // }
+    $usuarios = User::where('id', '!=', $authUser->id)
+        ->select('id', 'nome')
+        ->get();
 
-        return response()->json(User::all());
+    return response()->json($usuarios);
     }
 
     /**

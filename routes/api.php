@@ -19,6 +19,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Usuário autenticado
     Route::get('/usuarios/me', fn (Request $request) => response()->json($request->user()));
 
+    Route::get('/usuarios', [UserController::class, 'index']);
+
     // CRUD do próprio usuário
     Route::get('/usuarios/{usuario}', [UserController::class, 'show']);
     Route::put('/usuarios/{usuario}', [UserController::class, 'update']);
