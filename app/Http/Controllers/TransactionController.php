@@ -186,4 +186,19 @@ class TransactionController extends Controller
 
         return response()->json($transactions);
     }
+
+    public function deposit(Request $request)
+    {
+    $data = $request->validate([
+        'amount' => 'required|numeric|min:0.01',
+    ]);
+
+    $user = $request->user();
+
+    DB::table('users')
+        ->where('id', $user->id)
+        ->update(['saldo' => DB::raw("saldo + {$data['amount']}")]);
+
+    return response()->json(['message' => 'Depósito realizado com sucesso'], 200);
+    }
 }
