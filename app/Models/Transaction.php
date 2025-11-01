@@ -16,6 +16,10 @@ class Transaction extends Model
         'to_user_id',
         'amount',
         'status',
+        'type',
+        'description',
+        'sender_id',
+        'receiver_id',
     ];
 
     public function fromUser() {
@@ -24,5 +28,15 @@ class Transaction extends Model
 
     public function toUser() {
         return $this->belongsTo(User::class, 'to_user_id');
+    }
+
+    public function sender()
+    {
+        return $this->belongsTo(User::class, 'sender_id');
+    }
+
+    public function receiver()
+    {
+        return $this->belongsTo(User::class, 'receiver_id');
     }
 }
