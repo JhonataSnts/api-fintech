@@ -2,51 +2,46 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\PagSeguroPaymentService;
 use Illuminate\Http\Request;
-use App\Services\PaymentService;
 use Illuminate\Support\Facades\Auth;
 
 class PaymentController extends Controller
 {
     protected $paymentService;
 
-    public function __construct(PaymentService $paymentService)
-    {
-        $this->paymentService = $paymentService;
+    public function __construct()
+{
+    $driver = env('PAYMENT_DRIVER', 'pagseguro');
+
+    if ($driver === 'fake') {
+        $this->paymentService = new \App\Services\FakePaymentService();
+    } else {
+        $this->paymentService = app(\App\Services\PagSeguroPaymentService::class);
     }
+}
 
     /**
-     * Simula um depósito
+     * Cria um depósito real (via PagSeguro sandbox)
      */
     public function deposit(Request $request)
     {
         $request->validate(['amount' => 'required|numeric|min:1']);
 
         $user = Auth::user();
-        $transaction = $this->paymentService->processDeposit($user, $request->amount);
+        $transaction = $this->paymentService->createDeposit($user, $request->amount);
 
         return response()->json([
-            'message' => 'Depósito realizado com sucesso!',
+            'message' => 'Depósito iniciado com sucesso!',
             'transaction' => $transaction,
-            'new_balance' => $user->balance
         ]);
     }
 
     /**
-     * Simula webhook (para testes locais)
+     * Webhook (simulado por enquanto)
      */
     public function webhook(Request $request)
     {
-        $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'amount' => 'required|numeric|min:1',
-        ]);
-
-        $transaction = $this->paymentService->simulateWebhook($request->all());
-
-        return response()->json([
-            'message' => 'Webhook recebido e processado',
-            'transaction' => $transaction,
-        ]);
+        return response()->json(['message' => 'Webhook ainda não implementado']);
     }
 }
