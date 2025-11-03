@@ -35,7 +35,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/usuarios/{usuario}', [UserController::class, 'destroy']);
 
     // Transações do usuário autenticado
-    Route::post('/transactions/deposit', [TransactionController::class, 'deposit']);
     Route::post('/transactions', [TransactionController::class, 'store']); // Criar transferência
     Route::get('/transactions', [TransactionController::class, 'index']);  // Histórico pessoal
 
