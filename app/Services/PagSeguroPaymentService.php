@@ -9,68 +9,93 @@ use Illuminate\Support\Facades\Log;
 
 class PagSeguroPaymentService
 {
-    protected $email;
-    protected $token;
-    protected $baseUrl;
+    protected string $token;
+    protected string $baseUrl;
 
     public function __construct()
-    {
-        $config = config('pagseguro.sandbox');
-
-        $this->email = $config['email'];
-        $this->token = $config['token'];
-        $this->baseUrl = $config['base_url'];
-    }
+{
+    $this->token = env('PAGSEGURO_TOKEN', 'fake-token'); // ou config('pagseguro.sandbox.app_key')
+    $this->baseUrl = rtrim(config('pagseguro.sandbox.base_url', 'https://sandbox.api.pagseguro.com'), '/');
+}
 
     /**
-     * Cria um pagamento (exemplo: depósito)
+     * Cria um pagamento PIX e retorna o QR Code/link
      */
     public function createDeposit(User $user, float $amount)
     {
-        $payload = [
-            'reference_id' => 'DEPOSIT-' . uniqid(),
-            'description' => 'Depósito na conta digital',
-            'amount' => [
-                'value' => intval($amount * 100), // em centavos
-                'currency' => 'BRL'
-            ],
-            'payment_method' => [
-                'type' => 'CREDIT_CARD',
-                // em produção: os dados do cartão viriam do front (tokenizados)
-            ],
-            'notification_urls' => [
-                url('/api/webhook/payment')
-            ],
-        ];
-
         try {
-            $response = Http::withHeaders([
-                'Authorization' => "Bearer {$this->token}",
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ])->post("{$this->baseUrl}/orders", $payload);
+            $payload = [
+                'reference_id' => 'DEPOSIT-' . uniqid(),
+                'description' => 'Depósito via PIX',
+                'amount' => [
+                    'value' => intval($amount * 100), // em centavos
+                    'currency' => 'BRL',
+                ],
+                'notification_urls' => [
+                    config('app.url') . '/api/webhook/payment'
+                ],
+                'customer' => [
+                    'name' => $user->name ?? 'Cliente Teste',
+                    'email' => $user->email ?? 'teste@example.com',
+                    'tax_id' => '00000000191', // CPF genérico para sandbox
+                ],
+            ];
 
-            if ($response->failed()) {
-                Log::error('Erro PagSeguro', ['response' => $response->body()]);
-                return ['error' => 'Falha ao criar transação no PagSeguro'];
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->token,
+                'Content-Type' => 'application/json',
+            ])->post($this->baseUrl . '/pix/payments', $payload);
+
+            $pixData = $response->json();
+            Log::info('🔹 Resposta PagSeguro PIX:', $pixData);
+
+            if (!$response->successful() || empty($pixData['qr_codes'][0]['links'][0]['href'])) {
+                Log::error('❌ Falha ao gerar PIX:', [
+                    'status' => $response->status(),
+                    'body' => $pixData
+                ]);
+                return ['error' => 'Falha ao gerar QR Code PIX'];
             }
 
-            $data = $response->json();
+            // Retorna os dados principais
+            return [
+                'qrcode_link' => $pixData['qr_codes'][0]['links'][0]['href'],
+                'qrcode_text' => $pixData['qr_codes'][0]['text'],
+                'payment_id' => $pixData['id'],
+            ];
 
-            // Aqui você poderia salvar localmente a transação como "pendente"
-            Transaction::create([
-                'sender_id' => null,
-                'receiver_id' => $user->id,
-                'amount' => $amount,
-                'type' => 'deposit',
-                'status' => 'pending',
-                'description' => 'Depósito iniciado via PagSeguro',
+        } catch (\Throwable $e) {
+            Log::error('💥 Erro interno PagSeguroService', [
+                'message' => $e->getMessage(),
+                'line' => $e->getLine(),
             ]);
-
-            return $data;
-        } catch (\Exception $e) {
-            Log::error('Exceção PagSeguro', ['message' => $e->getMessage()]);
-            return ['error' => $e->getMessage()];
+            return ['error' => 'Erro interno ao processar depósito'];
         }
+    }
+
+    /**
+     * Atualiza o status de uma transação (via webhook)
+     */
+    public function updateTransactionStatus(string $referenceId, string $status)
+    {
+        $transaction = Transaction::where('id', $referenceId)->first();
+        if (!$transaction) return null;
+
+        $transaction->status = match ($status) {
+            'PAID', 'SETTLED', 'COMPLETED' => 'completed',
+            'CANCELLED', 'REFUNDED' => 'failed',
+            default => 'pending',
+        };
+        $transaction->save();
+
+        if ($transaction->status === 'completed') {
+            $user = $transaction->toUser;
+            if ($user) {
+                $user->saldo += $transaction->amount;
+                $user->save();
+            }
+        }
+
+        return $transaction;
     }
 }

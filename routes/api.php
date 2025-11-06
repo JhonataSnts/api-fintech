@@ -3,9 +3,10 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PixTransactionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\PagBankController;
 
 // Rotas públicas
 Route::post('/register', [AuthController::class, 'register']);
@@ -27,7 +28,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/usuarios', [UserController::class, 'index']);
 
-    Route::post('/transactions/deposit', [PaymentController::class, 'deposit']);
+    
 
     // CRUD do próprio usuário
     Route::get('/usuarios/{usuario}', [UserController::class, 'show']);
@@ -45,4 +46,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-Route::post('/webhook/payment', [PaymentController::class, 'webhook']); // sem auth, simula callback externa
+// Rota protegida — criar Pix
+Route::middleware('auth:sanctum')->post('/pix/create', [PixTransactionController::class, 'create']);
+
+// Webhook (sem autenticação)
+Route::post('/pix/webhook', [PixTransactionController::class, 'webhook']);
+
+Route::post('/pix/simulate/{id}', [PixTransactionController::class, 'simulate']);
+
+Route::middleware('auth:sanctum')->post('/deposit', [TransactionController::class, 'deposit']);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
@@ -23,19 +24,20 @@ class TransactionController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $transactions->transform(function ($transaction) {
-            $tipo = ($transaction->fromUser?->id === $transaction->from_user_id) ? 'enviada' : 'recebida';
+        $transactions->transform(function ($transaction) use ($user) {
+    $tipo = ($transaction->from_user_id === $user->id) ? 'enviada' : 'recebida';
 
-            return [
-                'id' => $transaction->id,
-                'tipo' => $tipo,
-                'valor' => number_format($transaction->amount, 2, ',', '.'),
-                'status' => $transaction->status,
-                'data' => $transaction->created_at->format('d/m/Y H:i'),
-                'remetente' => $transaction->fromUser?->nome ?? 'Usuário deletado',
-                'destinatario' => $transaction->toUser?->nome ?? 'Usuário deletado',
-            ];
-        });
+    return [
+        'id' => $transaction->id,
+        'tipo' => $tipo,
+        'valor' => number_format($transaction->amount, 2, ',', '.'),
+        'status' => $transaction->status,
+        'data' => $transaction->created_at->format('d/m/Y H:i'),
+        'remetente' => $transaction->fromUser?->nome ?? 'PagSeguro', // se null, vem de PagSeguro
+        'destinatario' => $transaction->toUser?->nome ?? 'Usuário desconhecido',
+    ];
+});
+
 
         return response()->json($transactions);
     }
@@ -188,17 +190,30 @@ class TransactionController extends Controller
     }
 
     public function deposit(Request $request)
-    {
+{
     $data = $request->validate([
         'amount' => 'required|numeric|min:0.01',
     ]);
 
-    $user = $request->user();
+    $user = Auth::user();
 
-    DB::table('users')
-        ->where('id', $user->id)
-        ->update(['saldo' => DB::raw("saldo + {$data['amount']}")]);
+    // Atualiza o saldo
+    $user->saldo += $data['amount'];
+    $user->save();
 
-    return response()->json(['message' => 'Depósito realizado com sucesso'], 200);
-    }
+    // ✅ Cria um registro de transação no histórico
+    Transaction::create([
+        'from_user_id' => $user->id,
+        'to_user_id' => $user->id,
+        'amount' => $data['amount'],
+        'type' => 'deposit',
+        'status' => 'completed',
+        'description' => 'Depósito manual',
+    ]);
+
+    return response()->json([
+        'message' => 'Depósito realizado com sucesso',
+        'saldo' => $user->saldo
+    ], 200);
+}
 }

@@ -12,14 +12,14 @@ class Transaction extends Model
     protected $table = 'transactions';
 
     protected $fillable = [
+        'external_id',
         'from_user_id',
         'to_user_id',
         'amount',
         'status',
-        'type',
         'description',
-        'sender_id',
-        'receiver_id',
+        'qr_payload',
+        'qr_image_url',
     ];
 
     public function fromUser() {
@@ -30,13 +30,4 @@ class Transaction extends Model
         return $this->belongsTo(User::class, 'to_user_id');
     }
 
-    public function sender()
-    {
-        return $this->belongsTo(User::class, 'sender_id');
-    }
-
-    public function receiver()
-    {
-        return $this->belongsTo(User::class, 'receiver_id');
-    }
 }
