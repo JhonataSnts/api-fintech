@@ -1,6 +1,6 @@
 # API Fintech - Laravel 12 + Docker + Sanctum
 
-API RESTful desenvolvida com **Laravel 12**, **Docker** e **Laravel Sanctum**, simulando funcionalidades básicas de uma fintech: autenticação, gestão de usuários e transferências entre contas, com suporte a **roles (user/admin)** e **testes automatizados**.
+API RESTful desenvolvida com **Laravel 12**, **Docker**, **Laravel Sanctum** **+ PagBank (sandbox) simulando Pix e QR Codes**, funcionalidades básicas de uma fintech: autenticação, gestão de usuários e transferências entre contas, com suporte a **roles (user/admin)** e **testes automatizados**.
 
 ---
 
