@@ -27,6 +27,8 @@ API RESTful desenvolvida com **Laravel 12**, **Docker** e **Laravel Sanctum**, s
 
 ## Resultados dos Testes e Demonstrações:
 
+<img width="931" height="63" alt="Captura de tela de 2025-11-06 17-05-49" src="https://github.com/user-attachments/assets/7ca30386-d032-4c94-bddd-2653ee88216f" />
+
 <img width="500" height="600" alt="testes feature" src="https://github.com/user-attachments/assets/6125a973-bbfe-4bcd-b319-9e20b9036dfb" />
 
 <img width="500" height="627" alt="api_login" src="https://github.com/user-attachments/assets/9303cb24-0d99-4299-b206-366de8db8018" />
