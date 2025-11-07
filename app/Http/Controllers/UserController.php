@@ -2,93 +2,51 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UserStoreRequest;
+use App\Http\Requests\UserUpdateRequest;
+use App\Http\Resources\UserResource;
 use App\Models\User;
-use Illuminate\Http\Request;
+use App\Services\UserService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
-    /**
-     * Lista todos os usuários (opcional: apenas admins)
-     */
-    public function index()
+    public function __construct(
+        protected UserService $userService
+    ) {}
+
+    public function index(): JsonResponse
     {
-    $authUser = auth()->user();
-
-    $usuarios = User::where('id', '!=', $authUser->id)
-        ->select('id', 'nome')
-        ->get();
-
-    return response()->json($usuarios);
+        $users = $this->userService->getAllExceptAuthUser();
+        return response()->json(UserResource::collection($users));
     }
 
-    /**
-     * Cria um novo usuário (registrar via API ou admin)
-     */
-    public function store(Request $request)
+    public function store(UserStoreRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'nome' => 'required|string|max:255',
-            'email' => 'required|email|unique:users',
-            'saldo' => 'nullable|numeric'
-        ]);
-
-        $user = User::create($data);
-
-        return response()->json($user, 201);
+        $user = $this->userService->create($request->validated());
+        return response()->json(new UserResource($user), 201);
     }
 
-    /**
-     * Mostra os dados de um usuário específico
-     */
-    public function show(User $usuario)
+    public function show(User $user): JsonResponse
     {
-        $authUser = auth()->user();
-
-        // Permitir apenas se for o próprio usuário
-        if ($authUser->id !== $usuario->id) {
-            return response()->json(['message' => 'Acesso negado'], 403);
-        }
-
-        return response()->json($usuario);
+        $this->authorize('view', $user);
+        return response()->json(new UserResource($user));
     }
 
-    /**
-     * Atualiza os dados do usuário
-     */
-    public function update(Request $request, User $usuario)
+    public function update(UserUpdateRequest $request, User $user): JsonResponse
     {
-        $authUser = auth()->user();
+        $this->authorize('update', $user);
 
-        // Permitir apenas se for o próprio usuário
-        if ($authUser->id !== $usuario->id) {
-            return response()->json(['message' => 'Acesso negado'], 403);
-        }
-
-        $data = $request->validate([
-            'nome' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $usuario->id,
-            'saldo' => 'sometimes|numeric'
-        ]);
-
-        $usuario->update($data);
-
-        return response()->json($usuario);
+        $updated = $this->userService->update($user, $request->validated());
+        return response()->json(new UserResource($updated));
     }
 
-    /**
-     * Deleta o usuário
-     */
-    public function destroy(User $usuario)
+    public function destroy(User $user): JsonResponse
     {
-        $authUser = auth()->user();
+        $this->authorize('delete', $user);
 
-        // Permitir apenas se for o próprio usuário
-        if ($authUser->id !== $usuario->id) {
-            return response()->json(['message' => 'Acesso negado'], 403);
-        }
-
-        $usuario->delete();
-
-        return response()->json(['message' => 'Usuário excluído com sucesso']);
+        $this->userService->delete($user);
+        return response()->json(['message' => 'User deleted successfully']);
     }
 }

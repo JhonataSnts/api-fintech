@@ -8,50 +8,69 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\PagBankController;
 
-// Rotas públicas
+/*
+|--------------------------------------------------------------------------
+| Public Routes
+|--------------------------------------------------------------------------
+*/
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
-//  Rotas protegidas por token (Sanctum)
+/*
+|--------------------------------------------------------------------------
+| Protected Routes (Sanctum)
+|--------------------------------------------------------------------------
+*/
 Route::middleware('auth:sanctum')->group(function () {
 
     // Logout
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Usuário autenticado
-    Route::get('/usuarios/me', fn (Request $request) => response()->json([
-    'id' => $request->user()->id,
-    'nome' => $request->user()->nome,
-    'email' => $request->user()->email,
-    'saldo' => $request->user()->saldo,
+    // Authenticated User
+    Route::get('/users/me', fn (Request $request) => response()->json([
+        'id' => $request->user()->id,
+        'name' => $request->user()->nome,
+        'email' => $request->user()->email,
+        'balance' => $request->user()->saldo,
     ]));
 
-    Route::get('/usuarios', [UserController::class, 'index']);
+    // Users CRUD
+    Route::get('/users', [UserController::class, 'index']);
+    Route::get('/users/{user}', [UserController::class, 'show']);
+    Route::put('/users/{user}', [UserController::class, 'update']);
+    Route::delete('/users/{user}', [UserController::class, 'destroy']);
 
-    
+    // User Transactions
+    Route::get('/transactions', [TransactionController::class, 'index']);  // User's transaction history
+    Route::post('/transactions', [TransactionController::class, 'store']); // Create a new transaction
 
-    // CRUD do próprio usuário
-    Route::get('/usuarios/{usuario}', [UserController::class, 'show']);
-    Route::put('/usuarios/{usuario}', [UserController::class, 'update']);
-    Route::delete('/usuarios/{usuario}', [UserController::class, 'destroy']);
+    // Deposit
+    Route::post('/deposit', [TransactionController::class, 'deposit']);
 
-    // Transações do usuário autenticado
-    Route::post('/transactions', [TransactionController::class, 'store']); // Criar transferência
-    Route::get('/transactions', [TransactionController::class, 'index']);  // Histórico pessoal
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['isAdmin'])->prefix('admin')->group(function () {
+        Route::get('/transactions', [TransactionController::class, 'indexAdmin']);
+        Route::get('/transactions/all', [TransactionController::class, 'all']);
+    });
 
-    //  Rotas ADMIN — protegidas com middleware 'isAdmin'
-    Route::middleware(['auth:sanctum', 'isAdmin'])->group(function () {
-    Route::get('/admin/transactions/all', [TransactionController::class, 'all']);
-    Route::get('/admin/transactions', [TransactionController::class, 'indexAdmin']);
+    /*
+    |--------------------------------------------------------------------------
+    | PIX Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('pix')->group(function () {
+        Route::post('/create', [PixTransactionController::class, 'create']);
+        Route::post('/simulate/{id}', [PixTransactionController::class, 'simulate']);
     });
 });
 
-// Rota protegida — criar Pix
-Route::middleware('auth:sanctum')->post('/pix/create', [PixTransactionController::class, 'create']);
-
-// Webhook (sem autenticação)
+/*
+|--------------------------------------------------------------------------
+| Webhook (Public)
+|--------------------------------------------------------------------------
+*/
 Route::post('/pix/webhook', [PixTransactionController::class, 'webhook']);
-
-Route::post('/pix/simulate/{id}', [PixTransactionController::class, 'simulate']);
-
-Route::middleware('auth:sanctum')->post('/deposit', [TransactionController::class, 'deposit']);
