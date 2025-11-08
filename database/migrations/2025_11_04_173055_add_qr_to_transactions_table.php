@@ -23,7 +23,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('transactions', function (Blueprint $table) {
-            //
+            $table->dropColumn(['qr_payload', 'qr_image_url']);
         });
     }
 };
