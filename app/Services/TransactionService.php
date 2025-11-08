@@ -4,14 +4,18 @@ namespace App\Services;
 
 use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
-use Exception;
+use App\Exceptions\Transactions\{
+    InsufficientFundsException,
+    SelfTransferException,
+    UserNotFoundException
+};
 
 class TransactionService
 {
     public function transfer(int $fromUserId, int $toUserId, float $amount): Transaction
     {
         if ($fromUserId === $toUserId) {
-            throw new Exception('Não é possível transferir para si mesmo');
+            throw new SelfTransferException();
         }
 
         return DB::transaction(function () use ($fromUserId, $toUserId, $amount) {
@@ -19,11 +23,11 @@ class TransactionService
             $to = DB::table('users')->where('id', $toUserId)->lockForUpdate()->first();
 
             if (!$from || !$to) {
-                throw new Exception('Usuário não encontrado');
+                throw new UserNotFoundException();
             }
 
             if (bccomp($from->saldo, $amount, 2) === -1) {
-                throw new Exception('Saldo insuficiente');
+                throw new InsufficientFundsException();
             }
 
             DB::table('users')->where('id', $fromUserId)->update(['saldo' => DB::raw("saldo - {$amount}")]);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use App\Http\Requests\StoreTransactionRequest;
 use App\Http\Requests\DepositRequest;
 use App\Http\Resources\TransactionResource;
@@ -10,9 +11,16 @@ use App\Services\TransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
+use App\Exceptions\Transactions\{
+    InsufficientFundsException,
+    SelfTransferException,
+    UserNotFoundException
+};
 
 class TransactionController extends Controller
 {
+    use AuthorizesRequests;
+    
     protected TransactionService $service;
 
     public function __construct(TransactionService $service)
@@ -21,19 +29,15 @@ class TransactionController extends Controller
     }
 
     public function all(Request $request): JsonResponse
-    {
-        $user = $request->user();
+{
+    $this->authorize('viewAny', Transaction::class);
 
-        if ($user->role !== 'admin') {
-            abort(403, 'Acesso negado');
-        }
+    $transactions = Transaction::with(['fromUser', 'toUser'])
+        ->latest()
+        ->get();
 
-        $transactions = Transaction::with(['fromUser', 'toUser'])
-            ->latest()
-            ->get();
-
-        return response()->json(TransactionResource::collection($transactions));
-    }
+    return response()->json(TransactionResource::collection($transactions));
+}
 
     public function store(StoreTransactionRequest $request): JsonResponse
 {
@@ -41,30 +45,19 @@ class TransactionController extends Controller
     $toUserId = (int) $request->validated()['to_user_id'];
     $amount = (float) $request->validated()['amount'];
 
-    // Evita transferir para si mesmo
-    if ($fromUser->id === $toUserId) {
-        return response()->json(['message' => 'Não é possível transferir para si mesmo'], 422);
-    }
-
     try {
         $transaction = $this->service->transfer($fromUser->id, $toUserId, $amount);
         return response()->json(new TransactionResource($transaction), 201);
-    } catch (\Exception $e) {
-        // Corrige o ponto final e o código de status
-        $message = trim($e->getMessage(), '.');
-        $status = $message === 'Saldo insuficiente' ? 422 : 500;
-
-        return response()->json(['message' => $message], $status);
+    } catch (SelfTransferException | InsufficientFundsException $e) {
+        return response()->json(['message' => $e->getMessage()], 422);
+    } catch (UserNotFoundException $e) {
+        return response()->json(['message' => $e->getMessage()], 404);
+    } catch (\Throwable $e) {
+        return response()->json(['message' => 'Erro interno no servidor'], 500);
     }
 }
 
-    public function deposit(DepositRequest $request): JsonResponse
-    {
-        $transaction = $this->service->deposit(Auth::user(), (float) $request->validated()['amount']);
-        return response()->json(new TransactionResource($transaction), 200);
-    }
-
-    public function index(Request $request): JsonResponse
+public function index(Request $request): JsonResponse
 {
     $user = $request->user();
 
@@ -75,10 +68,10 @@ class TransactionController extends Controller
         ->latest()
         ->get();
 
-    // Garante a estrutura { "data": [...] }
     return response()->json([
         'data' => TransactionResource::collection($transactions)
     ], 200);
 }
+
 
 }
