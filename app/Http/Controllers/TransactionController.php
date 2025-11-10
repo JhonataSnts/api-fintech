@@ -2,218 +2,76 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use App\Http\Requests\StoreTransactionRequest;
+use App\Http\Requests\DepositRequest;
+use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
-use App\Models\User;
+use App\Services\TransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\JsonResponse;
+use App\Exceptions\Transactions\{
+    InsufficientFundsException,
+    SelfTransferException,
+    UserNotFoundException
+};
 
 class TransactionController extends Controller
 {
-    /**
-     * Para admin: retorna todas as transações sem paginação
-     */
-    public function all(Request $request)
+    use AuthorizesRequests;
+    
+    protected TransactionService $service;
+
+    public function __construct(TransactionService $service)
     {
-        $user = $request->user();
-        if (!$user || $user->role !== 'admin') {
-            return response()->json(['message' => 'Acesso negado'], 403);
-        }
-
-        $transactions = Transaction::with(['fromUser', 'toUser'])
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        $transactions->transform(function ($transaction) use ($user) {
-    $tipo = ($transaction->from_user_id === $user->id) ? 'enviada' : 'recebida';
-
-    return [
-        'id' => $transaction->id,
-        'tipo' => $tipo,
-        'valor' => number_format($transaction->amount, 2, ',', '.'),
-        'status' => $transaction->status,
-        'data' => $transaction->created_at->format('d/m/Y H:i'),
-        'remetente' => $transaction->fromUser?->nome ?? 'PagSeguro', // se null, vem de PagSeguro
-        'destinatario' => $transaction->toUser?->nome ?? 'Usuário desconhecido',
-    ];
-});
-
-
-        return response()->json($transactions);
+        $this->service = $service;
     }
 
-    /**
-     * Para admin: retorna transações paginadas com filtros
-     */
-    public function indexAdmin(Request $request)
-    {
-        $user = $request->user();
-        if (!$user || $user->role !== 'admin') {
-            return response()->json(['message' => 'Acesso negado'], 403);
-        }
-
-        $query = Transaction::with(['fromUser', 'toUser']);
-
-        // Filtros de data
-        if ($request->filled('data_inicial')) {
-            $query->whereDate('created_at', '>=', $request->data_inicial);
-        }
-        if ($request->filled('data_final')) {
-            $query->whereDate('created_at', '<=', $request->data_final);
-        }
-
-        // Filtros de valor
-        if ($request->filled('valor_min')) {
-            $query->where('amount', '>=', $request->valor_min);
-        }
-        if ($request->filled('valor_max')) {
-            $query->where('amount', '<=', $request->valor_max);
-        }
-
-        // Filtro por tipo (enviada/recebida)
-        if ($request->filled('tipo')) {
-            if ($request->tipo === 'enviada') {
-                $query->whereNotNull('from_user_id');
-            } elseif ($request->tipo === 'recebida') {
-                $query->whereNotNull('to_user_id');
-            }
-        }
-
-        $transactions = $query->orderBy('created_at', 'desc')->paginate(10);
-
-        $transactions->getCollection()->transform(function ($transaction) {
-            $tipo = ($transaction->fromUser?->id === $transaction->from_user_id) ? 'enviada' : 'recebida';
-
-            return [
-                'id' => $transaction->id,
-                'tipo' => $tipo,
-                'valor' => number_format($transaction->amount, 2, ',', '.'),
-                'status' => $transaction->status,
-                'data' => $transaction->created_at->format('d/m/Y H:i'),
-                'remetente' => $transaction->fromUser?->nome ?? 'Usuário deletado',
-                'destinatario' => $transaction->toUser?->nome ?? 'Usuário deletado',
-            ];
-        });
-
-        return response()->json($transactions);
-    }
-
-    /**
-     * Cria uma transferência entre usuários autenticados
-     */
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'to_user_id' => 'required|integer|exists:users,id',
-            'amount' => 'required|numeric|min:0.01',
-        ]);
-
-        $fromUser = $request->user();
-        $toUserId = (int) $data['to_user_id'];
-        $amount = (float) $data['amount'];
-
-        if ($fromUser->id === $toUserId) {
-            return response()->json(['message' => 'Não é possível transferir para si mesmo'], 422);
-        }
-
-        try {
-            $transaction = DB::transaction(function () use ($fromUser, $toUserId, $amount) {
-                // Lock para evitar race condition
-                $from = DB::table('users')->where('id', $fromUser->id)->lockForUpdate()->first();
-                $to = DB::table('users')->where('id', $toUserId)->lockForUpdate()->first();
-
-                if (!$from || !$to) {
-                    throw new \Exception('Usuário não encontrado');
-                }
-
-                if (bccomp($from->saldo, $amount, 2) === -1) {
-                    throw new \Exception('Saldo insuficiente');
-                }
-
-                // Atualiza saldos
-                DB::table('users')->where('id', $fromUser->id)
-                    ->update(['saldo' => DB::raw("saldo - {$amount}")]);
-
-                DB::table('users')->where('id', $toUserId)
-                    ->update(['saldo' => DB::raw("saldo + {$amount}")]);
-
-                // Cria registro da transação
-                return Transaction::create([
-                    'from_user_id' => $fromUser->id,
-                    'to_user_id' => $toUserId,
-                    'amount' => $amount,
-                    'status' => 'completed',
-                ]);
-            }, 5);
-        } catch (\Exception $e) {
-            $msg = $e->getMessage();
-            if ($msg === 'Saldo insuficiente') {
-                return response()->json(['message' => $msg], 422);
-            }
-
-            return response()->json(['message' => 'Erro ao processar transação: ' . $msg], 500);
-        }
-
-        return response()->json($transaction, 201);
-    }
-
-    /**
-     * Histórico do usuário autenticado
-     */
-    public function index(Request $request)
-    {
-        $user = $request->user();
-
-        $transactions = Transaction::with(['fromUser', 'toUser'])
-            ->where(function ($q) use ($user) {
-                $q->where('from_user_id', $user->id)
-                  ->orWhere('to_user_id', $user->id);
-            })
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
-
-        $transactions->getCollection()->transform(function ($transaction) use ($user) {
-            $tipo = ($transaction->from_user_id === $user->id) ? 'enviada' : 'recebida';
-
-            return [
-                'id' => $transaction->id,
-                'tipo' => $tipo,
-                'valor' => number_format($transaction->amount, 2, ',', '.'),
-                'status' => $transaction->status,
-                'data' => $transaction->created_at->format('d/m/Y H:i'),
-                'remetente' => $transaction->fromUser?->nome ?? 'Usuário deletado',
-                'destinatario' => $transaction->toUser?->nome ?? 'Usuário deletado',
-            ];
-        });
-
-        return response()->json($transactions);
-    }
-
-    public function deposit(Request $request)
+    public function all(Request $request): JsonResponse
 {
-    $data = $request->validate([
-        'amount' => 'required|numeric|min:0.01',
-    ]);
+    $this->authorize('viewAny', Transaction::class);
 
-    $user = Auth::user();
+    $transactions = Transaction::with(['fromUser', 'toUser'])
+        ->latest()
+        ->get();
 
-    // Atualiza o saldo
-    $user->saldo += $data['amount'];
-    $user->save();
+    return response()->json(TransactionResource::collection($transactions));
+}
 
-    // ✅ Cria um registro de transação no histórico
-    Transaction::create([
-        'from_user_id' => $user->id,
-        'to_user_id' => $user->id,
-        'amount' => $data['amount'],
-        'type' => 'deposit',
-        'status' => 'completed',
-        'description' => 'Depósito manual',
-    ]);
+    public function store(StoreTransactionRequest $request): JsonResponse
+{
+    $fromUser = $request->user();
+    $toUserId = (int) $request->validated()['to_user_id'];
+    $amount = (float) $request->validated()['amount'];
+
+    try {
+        $transaction = $this->service->transfer($fromUser->id, $toUserId, $amount);
+        return response()->json(new TransactionResource($transaction), 201);
+    } catch (SelfTransferException | InsufficientFundsException $e) {
+        return response()->json(['message' => $e->getMessage()], 422);
+    } catch (UserNotFoundException $e) {
+        return response()->json(['message' => $e->getMessage()], 404);
+    } catch (\Throwable $e) {
+        return response()->json(['message' => 'Erro interno no servidor'], 500);
+    }
+}
+
+public function index(Request $request): JsonResponse
+{
+    $user = $request->user();
+
+    $transactions = Transaction::with(['fromUser', 'toUser'])
+        ->where(fn($q) => $q
+            ->where('from_user_id', $user->id)
+            ->orWhere('to_user_id', $user->id))
+        ->latest()
+        ->get();
 
     return response()->json([
-        'message' => 'Depósito realizado com sucesso',
-        'saldo' => $user->saldo
+        'data' => TransactionResource::collection($transactions)
     ], 200);
 }
+
+
 }
