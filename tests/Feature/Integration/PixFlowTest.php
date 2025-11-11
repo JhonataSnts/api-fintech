@@ -15,10 +15,8 @@ class PixFlowTest extends TestCase
     /** @test */
     public function usuario_consegue_criar_e_simular_pagamento_pix()
     {
-        // Simula resposta da API PagBank (mockando o endpoint /orders)
         Http::fake([
-            // Qualquer URL que termine em /orders
-            'pagseguro.uol.com.br/*/orders' => Http::response([
+            'sandbox.api.pagseguro.com/*/orders' => Http::response([
                 'id' => 'fake-order-id',
                 'qr_codes' => [[
                     'text' => '00020126360014BR.GOV.BCB.PIX0114+551198765432040000530398654040.005802BR5920NOME TESTE6009SAO PAULO',
