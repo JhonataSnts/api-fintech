@@ -31,6 +31,10 @@ API RESTful desenvolvida com **Laravel 12**, **Docker**, **Laravel Sanctum** **+
 
 <img width="500" height="600" alt="testes feature" src="https://github.com/user-attachments/assets/6125a973-bbfe-4bcd-b319-9e20b9036dfb" />
 
+<img width="1070" height="646" alt="Captura de tela de 2025-11-11 15-05-24" src="https://github.com/user-attachments/assets/b4774f90-2afd-4a1c-9450-ad90a2374f30" />
+
+<img width="1294" height="643" alt="Captura de tela de 2025-11-11 15-05-06" src="https://github.com/user-attachments/assets/17180cbc-5b3a-480c-9069-09b7cd514c41" />
+
 <img width="500" height="627" alt="api_login" src="https://github.com/user-attachments/assets/9303cb24-0d99-4299-b206-366de8db8018" />
 
 <img width="500" height="621" alt="transactions" src="https://github.com/user-attachments/assets/6a4012a9-7ced-4c01-8753-4b9b11371600" />
